@@ -60,6 +60,33 @@ static void MX_I2C1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+uint8_t i2c_found_addr[128];
+uint8_t i2c_found_count = 0;
+uint8_t bno055_found = 0;
+uint8_t bno055_addr = 0;
+
+void I2C_Scan(void)
+{
+	i2c_found_count = 0;
+	bno055_found = 0;
+	bno055_addr = 0;
+
+	for (uint8_t addr = 1; addr < 128; addr++)
+	{
+		if (HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(addr << 1), 2, 10) == HAL_OK)
+		{
+			i2c_found_addr[i2c_found_count] = addr;
+			i2c_found_count++;
+
+			if (addr == 0x28 || addr == 0x29)
+			{
+				bno055_found = 1;
+				bno055_addr = addr;
+			}
+		}
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -94,7 +121,8 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-
+  I2C_Scan();
+  volatile uint8_t scan_done = 1;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -104,6 +132,15 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	if (bno055_found) {
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+		HAL_Delay(500); // found. blink slowly
+	}
+	else
+	{
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+		HAL_Delay(100); // not found: blink fast
+	}
   }
   /* USER CODE END 3 */
 }
