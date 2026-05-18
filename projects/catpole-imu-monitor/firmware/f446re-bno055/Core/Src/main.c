@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,7 +45,8 @@ I2C_HandleTypeDef hi2c1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+#define BNO055_I2C_ADDR          (0x28 << 1)
+#define BNO055_ACCEL_DATA_X_LSB  0x08
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -54,7 +55,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
-
+HAL_StatusTypeDef bno055_read_accel(int16_t *ax, int16_t *ay, int16_t *az);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -122,13 +123,42 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   I2C_Scan();
-  volatile uint8_t scan_done = 1;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  printf("timestamp_ms,ax,ay,az\r\n");
+
+  uint32_t start_ms = HAL_GetTick();
+  uint32_t last_ms = 0;
+
   while (1)
   {
+	uint32_t now_ms = HAL_GetTick();
+	uint32_t elapsed_ms = now_ms - start_ms;
+
+	if ((now_ms - last_ms) >= 100)
+	{
+		last_ms = now_ms;
+
+		int16_t ax = 0;
+		int16_t ay = 0;
+		int16_t az = 0;
+
+		if (bno055_read_accel(&ax, &ay, &az) == HAL_OK)
+		{
+			printf("%lu,%d,%d,%d\r\n",
+				   elapsed_ms,
+				   ax,
+				   ay,
+				   az);
+		}
+		else
+		{
+			printf("%lu,ERR,ERR,ERR\r\n", elapsed_ms);
+		}
+	}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -299,7 +329,31 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+HAL_StatusTypeDef bno055_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
+{
+	uint8_t buf[6];
 
+	HAL_StatusTypeDef status = HAL_I2C_Mem_Read(
+		&hi2c1,
+		BNO055_I2C_ADDR,
+		BNO055_ACCEL_DATA_X_LSB,
+		I2C_MEMADD_SIZE_8BIT,
+		buf,
+		6,
+		100
+	);
+
+	if (status != HAL_OK)
+	{
+		return status;
+	}
+
+	*ax = (int16_t)((buf[1] << 8) | buf[0]);
+	*ay = (int16_t)((buf[3] << 8) | buf[2]);
+	*az = (int16_t)((buf[5] << 8) | buf[4]);
+
+	return HAL_OK;
+}
 /* USER CODE END 4 */
 
 /**
