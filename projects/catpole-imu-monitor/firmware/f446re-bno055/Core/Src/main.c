@@ -46,6 +46,13 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 #define BNO055_I2C_ADDR          (0x28 << 1)
+
+#define BNO055_PAGE_ID           0x07
+#define BNO055_OPR_MODE          0x3D
+
+#define BNO055_MODE_CONFIG       0x00
+#define BNO055_MODE_AMG          0x07
+
 #define BNO055_ACCEL_DATA_X_LSB  0x08
 /* USER CODE END PV */
 
@@ -55,7 +62,9 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
+HAL_StatusTypeDef bno055_init_for_accel(void);
 HAL_StatusTypeDef bno055_read_accel(int16_t *ax, int16_t *ay, int16_t *az);
+HAL_StatusTypeDef bno055_read_u8(uint8_t reg, uint8_t *value);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -123,6 +132,26 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   I2C_Scan();
+
+  if (bno055_init_for_accel() == HAL_OK)
+  {
+      printf("BNO055 init OK\r\n");
+  }
+  else
+  {
+      printf("BNO055 init ERR\r\n");
+  }
+
+  uint8_t chip_id = 0;
+  uint8_t page_id = 0;
+  uint8_t opr_mode = 0;
+
+  bno055_read_u8(0x00, &chip_id);
+  bno055_read_u8(0x07, &page_id);
+  bno055_read_u8(0x3D, &opr_mode);
+
+  printf("CHIP_ID=0x%02X PAGE_ID=0x%02X OPR_MODE=0x%02X\r\n",
+         chip_id, page_id, opr_mode);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -329,6 +358,67 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+HAL_StatusTypeDef bno055_init_for_accel(void)
+{
+    HAL_StatusTypeDef status;
+
+    // まず設定モードへ
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_OPR_MODE,
+        I2C_MEMADD_SIZE_8BIT,
+        (uint8_t[]){BNO055_MODE_CONFIG},
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(25);
+
+    // Register Page 0 に戻す
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_PAGE_ID,
+        I2C_MEMADD_SIZE_8BIT,
+        (uint8_t[]){0x00},
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(10);
+
+    // AMGモードへ
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_OPR_MODE,
+        I2C_MEMADD_SIZE_8BIT,
+        (uint8_t[]){BNO055_MODE_AMG},
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(25);
+
+    return HAL_OK;
+}
+
 HAL_StatusTypeDef bno055_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
 {
 	uint8_t buf[6];
@@ -352,7 +442,29 @@ HAL_StatusTypeDef bno055_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
 	*ay = (int16_t)((buf[3] << 8) | buf[2]);
 	*az = (int16_t)((buf[5] << 8) | buf[4]);
 
+	printf("raw=%02X %02X %02X %02X %02X %02X\r\n",
+	       buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+
 	return HAL_OK;
+}
+
+HAL_StatusTypeDef bno055_read_u8(uint8_t reg, uint8_t *value)
+{
+    return HAL_I2C_Mem_Read(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        reg,
+        I2C_MEMADD_SIZE_8BIT,
+        value,
+        1,
+        100
+    );
+}
+
+int _write(int file, char *ptr, int len)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+    return len;
 }
 /* USER CODE END 4 */
 

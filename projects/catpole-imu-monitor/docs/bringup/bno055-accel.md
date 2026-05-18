@@ -133,8 +133,160 @@ screen /dev/cu.usbmodem1103 115200
 
 こんな調子で重力加速度がたまにしか出ないのでデバッグをする。
 
-screen の終了方法は以下
+なお screen の終了方法は以下
 
 1. Ctrl + A を押す
 2. K を押す
 3. y を押す
+
+動作モードや生の値を出力するために以下のコードを追加する
+
+プライベート変数
+
+```c
+#define BNO055_PAGE_ID           0x07
+#define BNO055_OPR_MODE          0x3D
+
+#define BNO055_MODE_CONFIG       0x00
+#define BNO055_MODE_AMG          0x07
+```
+
+プロトタイプ宣言追加
+
+```c
+/* USER CODE BEGIN PFP */
+HAL_StatusTypeDef bno055_init_for_accel(void);
+HAL_StatusTypeDef bno055_read_accel(int16_t *ax, int16_t *ay, int16_t *az);
+HAL_StatusTypeDef bno055_read_u8(uint8_t reg, uint8_t *value);
+/* USER CODE END PFP */
+```
+
+初期化関数の定義
+
+```c
+/* USER CODE BEGIN 4 */
+HAL_StatusTypeDef bno055_init_for_accel(void)
+{
+    HAL_StatusTypeDef status;
+
+    // まず設定モードへ
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_OPR_MODE,
+        I2C_MEMADD_SIZE_8BIT,
+        (uint8_t[]){BNO055_MODE_CONFIG},
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(25);
+
+    // Register Page 0 に戻す
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_PAGE_ID,
+        I2C_MEMADD_SIZE_8BIT,
+        (uint8_t[]){0x00},
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(10);
+
+    // AMGモードへ
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_OPR_MODE,
+        I2C_MEMADD_SIZE_8BIT,
+        (uint8_t[]){BNO055_MODE_AMG},
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(25);
+
+    return HAL_OK;
+}
+```
+
+printf で UART を出力するためのローレベル関数と、レジスタの生の値を読み取る関数を定義
+
+```c
+HAL_StatusTypeDef bno055_read_u8(uint8_t reg, uint8_t *value)
+{
+    return HAL_I2C_Mem_Read(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        reg,
+        I2C_MEMADD_SIZE_8BIT,
+        value,
+        1,
+        100
+    );
+}
+
+int _write(int file, char *ptr, int len)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+    return len;
+}
+/* USER CODE END 4 */
+```
+
+呼び出し
+
+```c
+  /* USER CODE BEGIN 2 */
+  I2C_Scan();
+
+  if (bno055_init_for_accel() == HAL_OK)
+  {
+      printf("BNO055 init OK\r\n");
+  }
+  else
+  {
+      printf("BNO055 init ERR\r\n");
+  }
+
+  uint8_t chip_id = 0;
+  uint8_t page_id = 0;
+  uint8_t opr_mode = 0;
+
+  bno055_read_u8(0x00, &chip_id);
+  bno055_read_u8(0x07, &page_id);
+  bno055_read_u8(0x3D, &opr_mode);
+
+  printf("CHIP_ID=0x%02X PAGE_ID=0x%02X OPR_MODE=0x%02X\r\n",
+         chip_id, page_id, opr_mode);
+  /* USER CODE END 2 */
+```
+
+`bno055_read_accel` の中で生の値も出力
+
+```c
+	printf("raw=%02X %02X %02X %02X %02X %02X\r\n",
+	       buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+```
+
+しかし、chip id 0xa0, page id 0x00, opr mode 0x07、生の上下バイトと変換後の値は一致しているが、まだ重力加速度が出ない。
+
+明日は、動作モードを加速度のみにし、加速度センサーが物理的に正しく動いているかを確認する。
+持ち上げたりタイピングしたりしているとたまに正しいそうな重力加速度がZ軸に出ることがあるので、センサー自体は生きているものの、何らかの理由で常に正しい値が見られるようになっていないか、配線などに問題があるのではないか。
