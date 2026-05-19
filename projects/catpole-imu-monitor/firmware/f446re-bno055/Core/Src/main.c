@@ -47,13 +47,16 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 #define BNO055_I2C_ADDR          (0x28 << 1)
 
+#define BNO055_CHIP_ID           0x00
 #define BNO055_PAGE_ID           0x07
+#define BNO055_ACCEL_DATA_X_LSB  0x08
 #define BNO055_OPR_MODE          0x3D
 
 #define BNO055_MODE_CONFIG       0x00
-#define BNO055_MODE_AMG          0x07
+#define BNO055_MODE_ACCONLY      0x01
 
-#define BNO055_ACCEL_DATA_X_LSB  0x08
+#define BNO055_ACC_CONFIG        0x08
+#define BNO055_ACC_CONFIG_VALUE  0x18
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -360,63 +363,100 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 HAL_StatusTypeDef bno055_init_for_accel(void)
 {
-    HAL_StatusTypeDef status;
+  HAL_StatusTypeDef status;
+  uint8_t value;
 
-    // まず設定モードへ
-    status = HAL_I2C_Mem_Write(
-        &hi2c1,
-        BNO055_I2C_ADDR,
-        BNO055_OPR_MODE,
-        I2C_MEMADD_SIZE_8BIT,
-        (uint8_t[]){BNO055_MODE_CONFIG},
-        1,
-        100
-    );
+  // 1. CONFIG mode に入る
+  value = BNO055_MODE_CONFIG;
+  status = HAL_I2C_Mem_Write(
+      &hi2c1,
+      BNO055_I2C_ADDR,
+      BNO055_OPR_MODE,
+      I2C_MEMADD_SIZE_8BIT,
+      &value,
+      1,
+      100);
 
-    if (status != HAL_OK)
-    {
-        return status;
-    }
+  if (status != HAL_OK)
+  {
+    return status;
+  }
 
-    HAL_Delay(25);
+  HAL_Delay(25);
 
-    // Register Page 0 に戻す
-    status = HAL_I2C_Mem_Write(
-        &hi2c1,
-        BNO055_I2C_ADDR,
-        BNO055_PAGE_ID,
-        I2C_MEMADD_SIZE_8BIT,
-        (uint8_t[]){0x00},
-        1,
-        100
-    );
+  // 2. Page 1 に切り替える
+  value = 0x01;
+  status = HAL_I2C_Mem_Write(
+      &hi2c1,
+      BNO055_I2C_ADDR,
+      BNO055_PAGE_ID,
+      I2C_MEMADD_SIZE_8BIT,
+      &value,
+      1,
+      100);
 
-    if (status != HAL_OK)
-    {
-        return status;
-    }
+  if (status != HAL_OK)
+  {
+    return status;
+  }
 
-    HAL_Delay(10);
+  HAL_Delay(10);
 
-    // AMGモードへ
-    status = HAL_I2C_Mem_Write(
-        &hi2c1,
-        BNO055_I2C_ADDR,
-        BNO055_OPR_MODE,
-        I2C_MEMADD_SIZE_8BIT,
-        (uint8_t[]){BNO055_MODE_AMG},
-        1,
-        100
-    );
+  // 3. 加速度センサー設定
+  value = BNO055_ACC_CONFIG_VALUE;
+  status = HAL_I2C_Mem_Write(
+      &hi2c1,
+      BNO055_I2C_ADDR,
+      BNO055_ACC_CONFIG,
+      I2C_MEMADD_SIZE_8BIT,
+      &value,
+      1,
+      100);
 
-    if (status != HAL_OK)
-    {
-        return status;
-    }
+  if (status != HAL_OK)
+  {
+    return status;
+  }
 
-    HAL_Delay(25);
+  HAL_Delay(10);
 
-    return HAL_OK;
+  // 4. Page 0 に戻す
+  value = 0x00;
+  status = HAL_I2C_Mem_Write(
+      &hi2c1,
+      BNO055_I2C_ADDR,
+      BNO055_PAGE_ID,
+      I2C_MEMADD_SIZE_8BIT,
+      &value,
+      1,
+      100);
+
+  if (status != HAL_OK)
+  {
+    return status;
+  }
+
+  HAL_Delay(10);
+
+  // 5. ACCONLY mode に入る
+  value = BNO055_MODE_ACCONLY;
+  status = HAL_I2C_Mem_Write(
+      &hi2c1,
+      BNO055_I2C_ADDR,
+      BNO055_OPR_MODE,
+      I2C_MEMADD_SIZE_8BIT,
+      &value,
+      1,
+      100);
+
+  if (status != HAL_OK)
+  {
+    return status;
+  }
+
+  HAL_Delay(100);
+
+  return HAL_OK;
 }
 
 HAL_StatusTypeDef bno055_read_accel(int16_t *ax, int16_t *ay, int16_t *az)

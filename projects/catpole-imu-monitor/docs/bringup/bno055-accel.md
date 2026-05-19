@@ -290,3 +290,144 @@ int _write(int file, char *ptr, int len)
 
 明日は、動作モードを加速度のみにし、加速度センサーが物理的に正しく動いているかを確認する。
 持ち上げたりタイピングしたりしているとたまに正しいそうな重力加速度がZ軸に出ることがあるので、センサー自体は生きているものの、何らかの理由で常に正しい値が見られるようになっていないか、配線などに問題があるのではないか。
+
+---
+
+モードを加速度のみにして、加速度センサー単体で正しく動いているかを検証する。BNO055 は磁気センサー、ジャイロスコープ、センサーフュージョンを備えているが、静止時でも見えるはずの重力が見えていないため、まずは加速度センサー単体で正しい値が取れるかを確認する。
+
+昨日は AMG (accelerometer, magnetometer, gyroscope) モードで動かしていた。これを ACCONLY モードにする。
+
+![operating modes table](../../images/operating-modes.png)
+
+プライベート変数
+
+```c
+/* USER CODE BEGIN PV */
+#define BNO055_I2C_ADDR          (0x28 << 1)
+
+#define BNO055_CHIP_ID           0x00
+#define BNO055_PAGE_ID           0x07
+#define BNO055_ACCEL_DATA_X_LSB  0x08
+#define BNO055_OPR_MODE          0x3D
+
+#define BNO055_MODE_CONFIG       0x00
+#define BNO055_MODE_ACCONLY      0x01
+
+#define BNO055_ACC_CONFIG        0x08
+#define BNO055_ACC_CONFIG_VALUE  0x18
+/* USER CODE END PV */
+```
+
+初期化関数のさしかえ
+
+```c
+HAL_StatusTypeDef bno055_init_for_accel(void)
+{
+    HAL_StatusTypeDef status;
+    uint8_t value;
+
+    // 1. CONFIG mode に入る
+    value = BNO055_MODE_CONFIG;
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_OPR_MODE,
+        I2C_MEMADD_SIZE_8BIT,
+        &value,
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(25);
+
+    // 2. Page 1 に切り替える
+    value = 0x01;
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_PAGE_ID,
+        I2C_MEMADD_SIZE_8BIT,
+        &value,
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(10);
+
+    // 3. 加速度センサー設定
+    value = BNO055_ACC_CONFIG_VALUE;
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_ACC_CONFIG,
+        I2C_MEMADD_SIZE_8BIT,
+        &value,
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(10);
+
+    // 4. Page 0 に戻す
+    value = 0x00;
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_PAGE_ID,
+        I2C_MEMADD_SIZE_8BIT,
+        &value,
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(10);
+
+    // 5. ACCONLY mode に入る
+    value = BNO055_MODE_ACCONLY;
+    status = HAL_I2C_Mem_Write(
+        &hi2c1,
+        BNO055_I2C_ADDR,
+        BNO055_OPR_MODE,
+        I2C_MEMADD_SIZE_8BIT,
+        &value,
+        1,
+        100
+    );
+
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    HAL_Delay(100);
+
+    return HAL_OK;
+}
+```
+
+これで加速度センサー単体が動くようになっているはずだが、昨日と同じ出力だった。
+
+ここでセンサーをこのように90度地面に対して傾けてみたところ、 ay 軸方向に -900 程度の加速度が出力されるようになったので、ジャンパ線のソケットへの差し込み方がよくないなどの物理的な原因だったらしい。3V3 や GND にもっと長いソケットを使うべきであった。
+
+![alt text](../../images/IMG_7434.jpeg)
+
