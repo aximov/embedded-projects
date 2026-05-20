@@ -482,9 +482,6 @@ HAL_StatusTypeDef bno055_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
 	*ay = (int16_t)((buf[3] << 8) | buf[2]);
 	*az = (int16_t)((buf[5] << 8) | buf[4]);
 
-	printf("raw=%02X %02X %02X %02X %02X %02X\r\n",
-	       buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
-
 	return HAL_OK;
 }
 
