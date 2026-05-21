@@ -163,16 +163,17 @@ int main(void)
   printf("timestamp_ms,ax,ay,az\r\n");
 
   uint32_t start_ms = HAL_GetTick();
-  uint32_t last_ms = 0;
+  uint32_t last_sample_ms = 0;
+  uint32_t last_led_ms = 0;
 
   while (1)
   {
     uint32_t now_ms = HAL_GetTick();
     uint32_t elapsed_ms = now_ms - start_ms;
 
-    if ((now_ms - last_ms) >= 100)
+    if ((now_ms - last_sample_ms) >= 100)
     {
-      last_ms = now_ms;
+      last_sample_ms = now_ms;
 
       int16_t ax = 0;
       int16_t ay = 0;
@@ -194,15 +195,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (bno055_found)
+    uint32_t led_interval_ms = bno055_found ? 500 : 100;
+
+    if ((now_ms - last_led_ms) >= led_interval_ms)
     {
+      last_led_ms = now_ms;
       HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-      HAL_Delay(500); // found. blink slowly
-    }
-    else
-    {
-      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-      HAL_Delay(100); // not found: blink fast
     }
   }
   /* USER CODE END 3 */

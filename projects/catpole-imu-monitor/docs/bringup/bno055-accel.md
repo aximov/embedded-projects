@@ -111,6 +111,8 @@ HAL_StatusTypeDef bno055_read_accell(int16_t *ax, int16_t *ay, int16_t *az)
 		}
 	}
     /* USER CODE END WHILE */
+    （中略）
+  }
 ```
 
 ビルドして実行、シリアルポートを見る。
@@ -731,3 +733,108 @@ polarsとmatplotlibでシンプルな[plotスクリプト](plot/main.py)を書�
 上が各軸の値で、下が norm。x軸についていえば最初の3秒程度は揺れていそうだが、それ以外の軸方向での揺れはあまり判然としない結果になった。
 
 このプロジェクトの実用的な目的の一つに通常とは異なる揺れの検出があるので、まずは揺れをより正確に測定する適切な方法を見つけたい。現時点で分かったこととしては、サンプリング周期が 500 ms だと小刻みな揺れは分かり難いという点がある。
+
+### サンプリング周期の修正
+
+サンプリング周期自体は、main の while ループで 100ms で書いてある。([該当箇所](https://github.com/aximov/embedded-projects/blob/ea5bc6bc8b6b2ba1eb46a6f61cc2ed32a3534e5e/projects/catpole-imu-monitor/firmware/f446re-bno055/Core/Src/main.c#L173))
+
+```c
+  while (1)
+  {
+    uint32_t now_ms = HAL_GetTick();
+    uint32_t elapsed_ms = now_ms - start_ms;
+
+    if ((now_ms - last_ms) >= 100)
+    {
+      last_ms = now_ms;
+
+      int16_t ax = 0;
+      int16_t ay = 0;
+      int16_t az = 0;
+
+      if (bno055_read_accel(&ax, &ay, &az) == HAL_OK)
+      {
+        printf("%lu,%d,%d,%d\r\n",
+               elapsed_ms,
+               ax,
+               ay,
+               az);
+      }
+      else
+      {
+        printf("%lu,ERR,ERR,ERR\r\n", elapsed_ms);
+      }
+    }
+    （中略）
+  }
+```
+
+しかし、この後の while ループ末尾の LED を光らせる箇所で 500ms のディレイを入れてしまっており、これが他の処理全てをブロックしてしまっている。（[該当箇所](https://github.com/aximov/embedded-projects/blob/ea5bc6bc8b6b2ba1eb46a6f61cc2ed32a3534e5e/projects/catpole-imu-monitor/firmware/f446re-bno055/Core/Src/main.c#L200)）
+
+```c
+    if (bno055_found)
+    {
+      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+      HAL_Delay(500); // found. blink slowly
+    }
+    else
+    {
+      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+      HAL_Delay(100); // not found: blink fast
+    }
+```
+
+LED の点滅間隔とセンサーのサンプリング間隔を独立して管理することで、 `HAL_Delay()` が while ループ全体に影響を及ぼす問題を解消する。LEDの方でもセンサーの方でやっているように `HAL_GetTick()` を使ってタイマーを管理する。
+
+while ループ全体としては以下のようになる。
+
+```c
+  uint32_t start_ms = HAL_GetTick();
+  uint32_t last_sample_ms = 0;
+  uint32_t last_led_ms = 0;
+
+  while (1)
+  {
+    uint32_t now_ms = HAL_GetTick();
+    uint32_t elapsed_ms = now_ms - start_ms;
+
+    if ((now_ms - last_sample_ms) >= 100)
+    {
+      last_sample_ms = now_ms;
+
+      int16_t ax = 0;
+      int16_t ay = 0;
+      int16_t az = 0;
+
+      if (bno055_read_accel(&ax, &ay, &az) == HAL_OK)
+      {
+        printf("%lu,%d,%d,%d\r\n",
+               elapsed_ms,
+               ax,
+               ay,
+               az);
+      }
+      else
+      {
+        printf("%lu,ERR,ERR,ERR\r\n", elapsed_ms);
+      }
+    }
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+    uint32_t led_interval_ms = bno055_found ? 500 : 100;
+
+    if ((now_ms - last_led_ms) >= led_interval_ms)
+    {
+      last_led_ms = now_ms;
+      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+    }
+  }
+  /* USER CODE END 3 */
+```
+
+このコードで [shake2.csv](shake2.csv) を取った。
+
+![alt text](plot/shake2.png)
+
+サンプリング間隔が短くなったことで、振動の様子がより詳細に見られるようになった。15秒経過時点から20秒経過時点まで、x軸方向に一定の大きさで揺らされたことがわかる。正の方向で加速度の最大値がある程度揃っているように見えるのは、動作が本当に一定だったのかセンサーの特性なのか？

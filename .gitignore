@@ -109,3 +109,5 @@ TouchGFX/simulator/msvs/.vs
 
 # Python local environments and generated plots
 .venv/
+
+.vscode/

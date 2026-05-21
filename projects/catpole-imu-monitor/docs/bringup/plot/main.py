@@ -1,11 +1,19 @@
-import sys
+import argparse
 import matplotlib.pyplot as plt
 import polars as pl
 
-csv_path = sys.argv[1]
+parser = argparse.ArgumentParser(description="Plot BNO055 accelerometer CSV logs.")
+parser.add_argument("csv_path", help="Input CSV path.")
+parser.add_argument(
+    "-o",
+    "--output",
+    default="plot.png",
+    help="Output image path. Defaults to plot.png.",
+)
+args = parser.parse_args()
 
 df = pl.read_csv(
-    csv_path,
+    args.csv_path,
     has_header=False,
     new_columns=["timestamp_ms", "ax", "ay", "az"],
 )
@@ -38,7 +46,7 @@ norm_plot.set_ylabel("norm")
 norm_plot.legend()
 norm_plot.grid(True)
 
-fig.suptitle(csv_path)
+fig.suptitle(args.csv_path)
 plt.tight_layout()
-plt.savefig("bno055_plot.png", dpi=150)
+plt.savefig(args.output, dpi=150)
 plt.show()
